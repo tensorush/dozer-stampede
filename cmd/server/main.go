@@ -19,14 +19,12 @@ import (
 	"github.com/rs/xid"
 )
 
-// client contains client data
 type client struct {
 	Id         int
 	MsgChan    chan *internal.Message
 	disconnect chan bool
 }
 
-// server contains server data
 type server struct {
 	db              *bbolt.DB
 	clients         []*client
@@ -151,14 +149,16 @@ func (srv *server) processMessages() {
 					}
 				} else if count, ok := srv.numMsgRetries[msg.Id]; ok && count == 3 {
 					log.Printf("ignore message %s", msg.Id)
-					srv.storeMessage(msg)
+					err := srv.storeMessage(msg)
+					if err != nil {
+						log.Fatal("failed to store message: ", err)
+					}
 				} else {
 					log.Printf("max retries reached for message %s", msg.Id)
-					count = 3
+					break
 				}
 
 				srv.sentMsgsMtx.Unlock()
-
 			}
 		} else {
 			time.Sleep(3 * time.Second)
@@ -215,14 +215,12 @@ func (srv *server) sendMessages(w http.ResponseWriter, r *http.Request) {
 		disconnect: make(chan bool),
 	}
 
-	if c, ok := w.(http.CloseNotifier); ok {
-		closeNotify := c.CloseNotify()
-		go func() {
-			if <-closeNotify {
-				client.disconnect <- true
-			}
-		}()
-	}
+	ctx := r.Context()
+
+	go func() {
+		<-ctx.Done()
+		client.disconnect <- true
+	}()
 
 	srv.clients = append(srv.clients, client)
 

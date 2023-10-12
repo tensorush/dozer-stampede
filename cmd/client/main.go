@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"dozer-stampede/internal"
 	"encoding/json"
-	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -28,7 +27,10 @@ func main() {
 	msgIds := make([]string, 0, batchSize)
 
 	client := sse.NewClient("http://localhost:8080/task?batchsize=" + strconv.Itoa(batchSize))
-	client.SubscribeChan("msgs", eventChan)
+	err := client.SubscribeChan("msgs", eventChan)
+	if err != nil {
+		log.Fatal("failed to subscribe to channel message id: ", err)
+	}
 
 	wg.Add(batchSize)
 	go receiveMessage(eventChan, &wg, &workerCount, msgIdMutex, seenMsgs, msgIds, batchSize)
@@ -98,11 +100,8 @@ func sendReport(id string) {
 		log.Fatal("failed to marshal message id: ", err)
 	}
 
-	res, err := http.Post("http://localhost:8080/report", "application/json", bytes.NewBuffer(report))
+	_, err = http.Post("http://localhost:8080/report", "application/json", bytes.NewBuffer(report))
 	if err != nil {
 		log.Fatal("failed to report message id: ", err)
 	}
-
-	io.Copy(io.Discard, res.Body)
-	res.Body.Close()
 }
